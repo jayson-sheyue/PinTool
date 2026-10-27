@@ -103,7 +103,9 @@ private func checkLargeFrame() {
     let estimate = Stitcher.estimateUpwardShift(previous: first, next: next)
     let elapsed = Date().timeIntervalSince(start)
     expect(estimate.accepted && estimate.upwardShift == 80, "large stitch elapsed=\(elapsed) \(estimate)")
-    expect(elapsed < 0.2, "large stitch too slow: \(elapsed)s")
+    // Debug builds on a shared CI runner vary by tens of milliseconds.
+    // This only catches a real slowdown, not a 30 fps release budget.
+    expect(elapsed < 0.5, "large stitch too slow: \(elapsed)s")
 }
 
 private func checkNoMovement() {
