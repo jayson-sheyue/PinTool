@@ -1,5 +1,7 @@
 .build/
 .swiftpm/
+dist/
+*.dmg
 PinTool.app/
 .DS_Store
 DerivedData/
