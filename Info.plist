@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh-Hans</string>
+	<key>CFBundleExecutable</key>
+	<string>PinTool</string>
+	<key>CFBundleIdentifier</key>
+	<string>local.pintool.Pin</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>钉图</string>
+	<key>CFBundleDisplayName</key>
+	<string>钉图</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>钉图需要录制屏幕，才能把你框选的内容截下来并钉在最前面。</string>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>长截图由你自己滚动页面，钉图不使用辅助功能。可以拒绝这项权限。</string>
+</dict>
+</plist>

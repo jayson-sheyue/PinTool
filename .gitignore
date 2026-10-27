@@ -1,0 +1,6 @@
+.build/
+.swiftpm/
+PinTool.app/
+.DS_Store
+DerivedData/
+*.xcuserstate
