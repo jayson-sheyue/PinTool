@@ -23,8 +23,8 @@ public enum Stitcher {
             return ShiftEstimate(upwardShift: 0, stickyFooterRows: 0, accepted: true, meanAbsoluteError: 0)
         }
 
-        // One frame should only move a modest slice. A taller template keeps repeating
-        // rows from locking onto the wrong copy, which is what produced the ghosting.
+        // A frame may move most of the viewport. It is accepted only when the
+        // remaining text rows agree on one distance, so a line is not pasted twice.
         guard let match = matchScroll(previous: previous, next: next) else { return rejected }
         if match.shift < 2 {
             return ShiftEstimate(upwardShift: 0, stickyFooterRows: 0, accepted: true, meanAbsoluteError: match.error)
@@ -37,105 +37,169 @@ public enum Stitcher {
         )
     }
 
-    /// Largest share of the viewport a single frame is allowed to move.
-    private static let maxShiftFraction = 0.42
+    /// Largest share of the viewport one frame may move. The rest has to match.
+    private static let maxShiftFraction = 0.85
 
     private static func matchScroll(previous: PixelBuffer, next: PixelBuffer) -> (shift: Int, error: Double)? {
-        let factor = max(1, previous.width / 160)
-        let previousGray = gray(from: previous, factor: factor)
-        let nextGray = gray(from: next, factor: factor)
-        guard previousGray.width == nextGray.width, previousGray.height == nextGray.height, previousGray.height >= 16 else {
+        let footer = stickyFooterRows(previous: previous, next: next)
+        let maxShift = min(previous.height - 24, Int((Double(previous.height) * maxShiftFraction).rounded()))
+        guard maxShift >= 2 else { return nil }
+        guard let scores = alignmentScores(previous: previous, next: next, maxShift: maxShift, footer: footer) else {
             return nil
         }
-        let templateH = max(8, previousGray.height / 5)
-        let templateY = min(previousGray.height - templateH - 1, max(8, Int((Double(previousGray.height) * maxShiftFraction).rounded())))
-        guard templateY + templateH < previousGray.height else { return nil }
-        let pixels = templateH * previousGray.width
-        guard pixels > 0 else { return nil }
 
         var bestShift = 0
-        var bestSum = Int.max
-        var secondSum = Int.max
-        for shift in 0...templateY {
-            let sum = sad(previous: previousGray, next: nextGray, y: templateY, rows: templateH, shift: shift)
-            if sum < bestSum {
-                if abs(shift - bestShift) > 6 {
-                    secondSum = bestSum
+        var best = Double.greatestFiniteMagnitude
+        for shift in 0...maxShift where scores[shift] < best {
+            best = scores[shift]
+            bestShift = shift
+        }
+        guard best < 18 else { return nil }
+
+        // A blank overlap matches every distance. That plateau must not be stitched.
+        var plateauLow = bestShift
+        while plateauLow > 0, scores[plateauLow - 1] <= best + 1.25 {
+            plateauLow -= 1
+        }
+        var plateauHigh = bestShift
+        while plateauHigh < maxShift, scores[plateauHigh + 1] <= best + 1.25 {
+            plateauHigh += 1
+        }
+        if plateauHigh - plateauLow > 6 { return nil }
+
+        // List rows share arrows and padding, so another row can score almost as
+        // well. A rival this close is not stitched; a clearly worse one is ignored.
+        let close = best + 2.5
+        var inside = false
+        var groups = 0
+        for shift in 0...maxShift {
+            let now = scores[shift] <= close
+            if now, !inside { groups += 1 }
+            inside = now
+        }
+        guard groups == 1 else { return nil }
+        return (bestShift, best)
+    }
+
+    /// Error of every shift, measured on columns that actually change down the page.
+    /// Padding and a repeated arrow then cannot outvote the words.
+    private static func alignmentScores(
+        previous: PixelBuffer,
+        next: PixelBuffer,
+        maxShift: Int,
+        footer: Int
+    ) -> [Double]? {
+        let limit = previous.height - footer
+        guard limit > 24 else { return nil }
+        let columns = distinctiveColumns(in: previous, yLimit: limit)
+        guard columns.count >= 8 else { return nil }
+        let content = contentRows(in: previous, above: limit)
+        guard content.count >= 8 else { return nil }
+        let previousSamples = samples(previous, columns: columns)
+        let nextSamples = samples(next, columns: columns)
+        let columnCount = columns.count
+
+        var scores = [Double](repeating: .greatestFiniteMagnitude, count: maxShift + 1)
+        previousSamples.withUnsafeBufferPointer { previousBuffer in
+            nextSamples.withUnsafeBufferPointer { nextBuffer in
+                guard let previousBase = previousBuffer.baseAddress,
+                      let nextBase = nextBuffer.baseAddress else { return }
+                var index = 0
+                for shift in 0...maxShift {
+                    while index < content.count, content[index] < shift {
+                        index += 1
+                    }
+                    let available = content.count - index
+                    guard available >= 8 else { continue }
+                    let step = max(1, available / 48)
+                    var sum = 0
+                    var rows = 0
+                    var cursor = index
+                    while cursor < content.count {
+                        let y = content[cursor]
+                        let otherY = y - shift
+                        let left = previousBase.advanced(by: y * columnCount)
+                        let right = nextBase.advanced(by: otherY * columnCount)
+                        for column in 0..<columnCount {
+                            sum += abs(Int(left[column]) - Int(right[column]))
+                        }
+                        rows += 1
+                        cursor += step
+                    }
+                    if rows >= 8 {
+                        scores[shift] = Double(sum) / Double(rows * columnCount)
+                    }
                 }
-                bestSum = sum
-                bestShift = shift
-            } else if abs(shift - bestShift) > 6, sum < secondSum {
-                secondSum = sum
             }
         }
+        return scores
+    }
 
-        let mean = Double(bestSum) / Double(pixels)
-        guard mean < 30 else { return nil }
-        let secondMean = secondSum == Int.max ? Double.greatestFiniteMagnitude : Double(secondSum) / Double(pixels)
-        let unique = secondMean >= mean + 6 || secondMean > mean * 1.45 + 2
-        guard unique else { return nil }
-
-        let rough = bestShift * factor
-        let band = min(24, max(12, previous.height / 6))
-        let span = max(12, factor * 2)
-        let low = max(0, rough - span)
-        let high = min(Int((Double(previous.height) * maxShiftFraction).rounded()), rough + span)
-        guard low <= high else { return nil }
-        var scored: [(shift: Int, error: Double)] = []
-        for shift in low...high {
-            let y = min(previous.height - band - 1, max(shift, Int((Double(previous.height) * 0.5).rounded())))
-            guard y >= shift else { continue }
-            let error = previous.bandMeanAbsoluteError(
-                y: y,
-                band: band,
-                against: next,
-                otherY: y - shift,
-                sampleStep: 2
-            )
-            scored.append((shift, error))
+    /// Columns whose pixels change down the page. Flat padding matches at every scroll.
+    private static func distinctiveColumns(in buffer: PixelBuffer, yLimit: Int) -> [Int] {
+        var chosen: [Int] = []
+        var x = 0
+        while x < buffer.width {
+            if columnSpread(buffer, x: x, yLimit: yLimit) >= 18 {
+                chosen.append(x)
+            }
+            x += 2
         }
-        guard let bestError = scored.map(\.error).min(), bestError < 36 else { return nil }
-        let plateau = scored.filter { $0.error <= bestError + 1.25 }.map(\.shift).sorted()
-        guard let refined = plateau.isEmpty ? nil : plateau[plateau.count / 2] else { return nil }
-        return (refined, bestError)
+        if chosen.count >= 8 {
+            guard chosen.count > 72 else { return chosen }
+            let step = Double(chosen.count) / 72.0
+            return (0..<72).map { chosen[min(chosen.count - 1, Int(Double($0) * step))] }
+        }
+        var fallback: [Int] = []
+        let step = max(2, buffer.width / 12)
+        var fallbackX = step / 2
+        while fallbackX < buffer.width {
+            fallback.append(fallbackX)
+            fallbackX += step
+        }
+        return fallback
     }
 
-    private struct GrayImage {
-        var width: Int
-        var height: Int
-        var samples: [Int]
+    private static func columnSpread(_ buffer: PixelBuffer, x: Int, yLimit: Int) -> Int {
+        var low = 255
+        var high = 0
+        var y = 0
+        while y < yLimit {
+            let gray = grayValue(buffer, x: x, y: y)
+            if gray < low { low = gray }
+            if gray > high { high = gray }
+            y += 2
+        }
+        return high - low
     }
 
-    private static func gray(from buffer: PixelBuffer, factor: Int) -> GrayImage {
-        let width = max(1, buffer.width / factor)
-        let height = max(1, buffer.height / factor)
-        var samples = [Int](repeating: 0, count: width * height)
-        buffer.bytes.withUnsafeBytes { raw in
-            guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return }
-            let rowBytes = buffer.width * 4
-            for y in 0..<height {
-                let row = base.advanced(by: y * factor * rowBytes)
-                for x in 0..<width {
-                    let pixel = row.advanced(by: x * factor * 4)
-                    samples[y * width + x] = (Int(pixel[0]) + Int(pixel[1]) + Int(pixel[2])) / 3
-                }
+    private static func samples(_ buffer: PixelBuffer, columns: [Int]) -> [UInt8] {
+        var values = [UInt8](repeating: 0, count: buffer.height * columns.count)
+        for y in 0..<buffer.height {
+            let row = y * columns.count
+            for (index, x) in columns.enumerated() {
+                values[row + index] = UInt8(grayValue(buffer, x: x, y: y))
             }
         }
-        return GrayImage(width: width, height: height, samples: samples)
+        return values
     }
 
-    private static func sad(previous: GrayImage, next: GrayImage, y: Int, rows: Int, shift: Int) -> Int {
-        let otherY = y - shift
-        guard otherY >= 0, y + rows <= previous.height, otherY + rows <= next.height else { return Int.max }
-        var sum = 0
-        for row in 0..<rows {
-            let left = (y + row) * previous.width
-            let right = (otherY + row) * next.width
-            for x in 0..<previous.width {
-                sum += abs(previous.samples[left + x] - next.samples[right + x])
+    private static func grayValue(_ buffer: PixelBuffer, x: Int, y: Int) -> Int {
+        let pixel = buffer.bgra(x: x, y: y)
+        return (Int(pixel.b) + Int(pixel.g) + Int(pixel.r)) / 3
+    }
+
+    /// Rows that contain edges. Blank gaps match every distance and used to pull the join off the text.
+    private static func contentRows(in buffer: PixelBuffer, above limit: Int) -> [Int] {
+        var rows: [Int] = []
+        var y = 0
+        while y < limit {
+            if buffer.meanRowStddev(startY: y, rows: 1) >= 8 {
+                rows.append(y)
             }
+            y += 1
         }
-        return sum
+        return rows
     }
 
     /// Rows at the bottom that stayed put and are visually busy enough to be a bar, not blank page.

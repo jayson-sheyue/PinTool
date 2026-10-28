@@ -2,6 +2,7 @@ import AppKit
 
 final class PinBoard {
     private var pins: [PinPanel] = []
+    var onNotice: ((String) -> Void)?
 
     var isEmpty: Bool { pins.isEmpty }
 
@@ -19,6 +20,9 @@ final class PinBoard {
         pin.onClose = { [weak self, weak pin] in
             guard let self, let pin else { return }
             self.close(pin)
+        }
+        pin.onCopied = { [weak self] in
+            self?.onNotice?("已拷贝到剪贴板")
         }
         pins.append(pin)
         if let avoiding {
@@ -62,6 +66,7 @@ final class PinBoard {
 
 final class PinPanel: NSPanel, NSWindowDelegate {
     var onClose: (() -> Void)?
+    var onCopied: (() -> Void)?
     private var imagePointSize: NSSize
     private var zoom: CGFloat
     private var minimumZoom: CGFloat
@@ -116,6 +121,7 @@ final class PinPanel: NSPanel, NSWindowDelegate {
         let nsImage = NSImage(cgImage: image, size: imagePointSize)
         let view = PinContentView(image: nsImage)
         view.onClose = { [weak self] in self?.onClose?() }
+        view.onCopied = { [weak self] in self?.onCopied?() }
         view.onZoom = { [weak self] factor, point in
             self?.zoom(by: factor, around: point)
         }
@@ -298,6 +304,7 @@ final class PinPanel: NSPanel, NSWindowDelegate {
 
 private final class PinContentView: NSView {
     var onClose: (() -> Void)?
+    var onCopied: (() -> Void)?
     var onZoom: ((CGFloat, CGPoint) -> Void)?
     private var image: NSImage
     private var zoom: CGFloat = 1
@@ -458,14 +465,59 @@ private final class PinContentView: NSView {
 
     override func rightMouseDown(with event: NSEvent) {
         let menu = NSMenu()
-        let item = NSMenuItem(title: "关闭这个钉图", action: #selector(closeFromMenu), keyEquivalent: "")
-        item.target = self
-        menu.addItem(item)
+        let copy = NSMenuItem(title: "拷贝图像到剪贴板", action: #selector(copyFromMenu), keyEquivalent: "c")
+        copy.keyEquivalentModifierMask = .command
+        copy.target = self
+        let close = NSMenuItem(title: "关闭这个钉图", action: #selector(closeFromMenu), keyEquivalent: "")
+        close.target = self
+        menu.addItem(copy)
+        menu.addItem(close)
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if isCopyShortcut(event) {
+            copyImage()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if isCopyShortcut(event) {
+            copyImage()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    @objc private func copyFromMenu() {
+        copyImage()
     }
 
     @objc private func closeFromMenu() {
         onClose?()
+    }
+
+    private func isCopyShortcut(_ event: NSEvent) -> Bool {
+        event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers?.lowercased() == "c"
+    }
+
+    /// Puts the full pinned image on the general pasteboard. No file is written.
+    private func copyImage() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard let tiff = image.tiffRepresentation else { return }
+        var payload: [NSPasteboard.PasteboardType: Data] = [.tiff: tiff]
+        if let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            payload[.png] = png
+        }
+        pasteboard.declareTypes(Array(payload.keys), owner: nil)
+        for (type, data) in payload {
+            pasteboard.setData(data, forType: type)
+        }
+        onCopied?()
     }
 }
 

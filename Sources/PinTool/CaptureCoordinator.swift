@@ -40,6 +40,11 @@ final class CaptureCoordinator {
         guide.shortcutText = { [weak self] in
             self?.shortcutLines() ?? ("⌃⌥A", "⌃⌥S")
         }
+        pins.onNotice = { [weak self] text in
+            Task { @MainActor in
+                self?.flash(text)
+            }
+        }
         applyHotkeys()
         if !Permissions.screenRecordingGranted || !ShortcutStore.didShowGuide {
             guide.show()

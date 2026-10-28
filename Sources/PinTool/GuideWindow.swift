@@ -110,7 +110,7 @@ final class GuideController: NSObject, NSWindowDelegate {
         stack.addArrangedSubview(configure(regionLine))
         stack.addArrangedSubview(configure(longLine))
         stack.addArrangedSubview(body("移动：按住钉图拖动。放大：在图上滚动或捏合，光标对准哪里就放大哪里。放大后拖动是查看其它部分，按住 Option 再拖可以移动整张图。"))
-        stack.addArrangedSubview(body("关闭：移上去点右上角的 ×，也可以右键关闭。菜单栏能一次关掉全部。钉图不写入磁盘，退出后就没了。"))
+        stack.addArrangedSubview(body("关闭：移上去点右上角的 ×，也可以右键关闭。菜单栏能一次关掉全部。钉图不写入磁盘，退出后就没了。右键或按 ⌘C 可以把整张图拷进剪贴板，不写文件。"))
         stack.addArrangedSubview(rule())
         stack.addArrangedSubview(title("需要的权限", size: 13, weight: .semibold, color: .labelColor))
         stack.addArrangedSubview(permissionRow(
@@ -274,6 +274,6 @@ extension GuideController {
 
 enum AppInfo {
     static var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.1"
     }
 }

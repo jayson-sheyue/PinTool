@@ -15,7 +15,6 @@ final class LongStitchSession: NSObject, SCStreamOutput, SCStreamDelegate, @unch
     private var target: CaptureTarget?
     private var assembler: ScrollAssembler?
     private var lastPreview = 0.0
-    private var lostStreak = 0
     private var stopped = false
     private var capped = false
     private var restarts = 0
@@ -103,7 +102,6 @@ final class LongStitchSession: NSObject, SCStreamOutput, SCStreamDelegate, @unch
         let step = assembler.add(next: frame)
         switch step {
         case .appended:
-            lostStreak = 0
             self.assembler = assembler
             publish(force: false)
             if assembler.pixelHeight >= 20_000 {
@@ -112,15 +110,9 @@ final class LongStitchSession: NSObject, SCStreamOutput, SCStreamDelegate, @unch
                     self?.onCapped?()
                 }
             }
-        case .noMovement:
-            lostStreak = 0
-            self.assembler = assembler
-        case .unreliable:
-            lostStreak += 1
-            if lostStreak >= 6 {
-                assembler.rebase(to: frame)
-                lostStreak = 0
-            }
+        case .noMovement, .unreliable:
+            // Keep the last frame that joined cleanly. Replacing it would drop the
+            // rows scrolled in between, or glue the next frame on at the wrong place.
             self.assembler = assembler
         }
     }
