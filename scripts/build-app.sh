@@ -6,9 +6,10 @@ swift build -c release
 
 APP="PinTool.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/release/PinTool" "$APP/Contents/MacOS/PinTool"
 cp "Info.plist" "$APP/Contents/Info.plist"
+cp "Resources/PinTool.icns" "$APP/Contents/Resources/PinTool.icns"
 chmod +x "$APP/Contents/MacOS/PinTool"
 codesign --force --sign - "$APP"
 echo "Built $APP"

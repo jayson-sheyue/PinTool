@@ -15,9 +15,10 @@ cleanup() {
 trap cleanup EXIT
 
 APP="$STAGE/PinTool.app"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/release/PinTool" "$APP/Contents/MacOS/PinTool"
 cp "Info.plist" "$APP/Contents/Info.plist"
+cp "Resources/PinTool.icns" "$APP/Contents/Resources/PinTool.icns"
 chmod +x "$APP/Contents/MacOS/PinTool"
 # Ad-hoc only. This machine has no Developer ID identity, so the result
 # cannot be notarized and Gatekeeper will block it on another Mac.

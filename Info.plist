@@ -6,6 +6,8 @@
 	<string>zh-Hans</string>
 	<key>CFBundleExecutable</key>
 	<string>PinTool</string>
+	<key>CFBundleIconFile</key>
+	<string>PinTool</string>
 	<key>CFBundleIdentifier</key>
 	<string>local.pintool.Pin</string>
 	<key>CFBundleInfoDictionaryVersion</key>
