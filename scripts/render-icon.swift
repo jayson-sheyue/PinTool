@@ -1,8 +1,10 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 /// Draws the same pin.fill used in the menu bar, sitting on warm paper.
-/// Finder masks the square; the pin stays inside that curve.
+/// The sheet is the macOS app-icon rounded rectangle, with transparent corners,
+/// so the logo matches Finder even where the system mask is not applied.
 let canvas = 1024
 let root = URL(fileURLWithPath: CommandLine.arguments[1])
 let iconset = root.appendingPathComponent("PinTool.iconset")
@@ -27,18 +29,52 @@ for (side, name) in sizes {
     try pngData(image).write(to: iconset.appendingPathComponent(name))
 }
 try pngData(master).write(to: root.appendingPathComponent("preview-icon.png"))
-try pngData(masked(master)).write(to: root.appendingPathComponent("preview-masked.png"))
 try pngData(scale(master, to: 128)).write(to: root.appendingPathComponent("preview-128.png"))
 try pngData(scale(master, to: 32)).write(to: root.appendingPathComponent("preview-32.png"))
+requireRoundedCorners(master)
 
 private func renderMaster(side: Int) -> NSImage {
-    let image = NSImage(size: NSSize(width: side, height: side))
-    image.lockFocus()
-    let rect = NSRect(x: 0, y: 0, width: side, height: side)
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    guard let context = CGContext(
+        data: nil,
+        width: side,
+        height: side,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else {
+        fputs("could not create icon context\n", stderr)
+        exit(1)
+    }
+    let rect = CGRect(x: 0, y: 0, width: side, height: side)
+    context.clear(rect)
+    context.setAllowsAntialiasing(true)
+    context.setShouldAntialias(true)
+    context.interpolationQuality = .high
+    let previous = NSGraphicsContext.current
+    NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+    context.saveGState()
+    context.addPath(iconShape(in: rect))
+    context.clip()
     drawPaper(in: rect)
     drawPin(in: rect)
-    image.unlockFocus()
-    return image
+    context.restoreGState()
+    NSGraphicsContext.current = previous
+    guard let rendered = context.makeImage() else {
+        fputs("could not render icon\n", stderr)
+        exit(1)
+    }
+    return NSImage(cgImage: rendered, size: NSSize(width: side, height: side))
+}
+
+/// Continuous rounded rectangle used by macOS app icons since Big Sur.
+/// Corner radius is 22.37% of the side, the proportion in Apple's icon grid.
+private func iconShape(in rect: CGRect) -> CGPath {
+    let radius = min(rect.width, rect.height) * 0.2237
+    return RoundedRectangle(cornerRadius: radius, style: .continuous)
+        .path(in: rect)
+        .cgPath
 }
 
 private func drawPaper(in rect: NSRect) {
@@ -128,55 +164,55 @@ private func opaqueImage(from symbol: NSImage) -> NSImage? {
 }
 
 private func scale(_ image: NSImage, to side: Int) -> NSImage {
-    let result = NSImage(size: NSSize(width: side, height: side))
-    result.lockFocus()
-    NSGraphicsContext.current?.imageInterpolation = .high
-    image.draw(
-        in: NSRect(x: 0, y: 0, width: side, height: side),
-        from: .zero,
-        operation: .copy,
-        fraction: 1
-    )
-    result.unlockFocus()
-    return result
+    var proposed = NSRect(origin: .zero, size: image.size)
+    guard let source = image.cgImage(forProposedRect: &proposed, context: nil, hints: nil) else { return image }
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    guard let context = CGContext(
+        data: nil,
+        width: side,
+        height: side,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else { return image }
+    context.interpolationQuality = .high
+    context.clear(CGRect(x: 0, y: 0, width: side, height: side))
+    context.draw(source, in: CGRect(x: 0, y: 0, width: side, height: side))
+    guard let scaled = context.makeImage() else { return image }
+    return NSImage(cgImage: scaled, size: NSSize(width: side, height: side))
 }
 
-private func masked(_ image: NSImage) -> NSImage {
-    let side = image.size.width
-    let result = NSImage(size: image.size)
-    result.lockFocus()
-    let context = NSGraphicsContext.current!.cgContext
-    context.addPath(squircle(in: CGRect(x: 0, y: 0, width: side, height: side), n: 5.4))
-    context.clip()
-    image.draw(in: NSRect(origin: .zero, size: image.size))
-    result.unlockFocus()
-    return result
-}
-
-private func squircle(in rect: CGRect, n: CGFloat) -> CGPath {
-    let path = CGMutablePath()
-    let steps = 240
-    let a = rect.width / 2
-    let b = rect.height / 2
-    let cx = rect.midX
-    let cy = rect.midY
-    for step in 0...steps {
-        let t = CGFloat(step) / CGFloat(steps) * 2 * .pi
-        let c = cos(t)
-        let s = sin(t)
-        let x = cx + a * sign(c) * pow(abs(c), 2 / n)
-        let y = cy + b * sign(s) * pow(abs(s), 2 / n)
-        if step == 0 { path.move(to: CGPoint(x: x, y: y)) }
-        else { path.addLine(to: CGPoint(x: x, y: y)) }
+private func requireRoundedCorners(_ image: NSImage) {
+    var proposed = NSRect(origin: .zero, size: image.size)
+    guard let cg = image.cgImage(forProposedRect: &proposed, context: nil, hints: nil),
+          let data = cg.dataProvider?.data,
+          let bytes = CFDataGetBytePtr(data) else {
+        fputs("could not read icon pixels\n", stderr)
+        exit(1)
     }
-    path.closeSubpath()
-    return path
-}
-
-private func sign(_ value: CGFloat) -> CGFloat {
-    if value < 0 { return -1 }
-    if value > 0 { return 1 }
-    return 0
+    let width = cg.width
+    let height = cg.height
+    let rowBytes = cg.bytesPerRow
+    let bytesPerPixel = max(1, cg.bitsPerPixel / 8)
+    func alpha(_ x: Int, _ y: Int) -> UInt8 {
+        let offset = y * rowBytes + x * bytesPerPixel
+        if bytesPerPixel >= 4 {
+            let alphaIndex = cg.alphaInfo == .premultipliedFirst || cg.alphaInfo == .first || cg.alphaInfo == .noneSkipFirst ? 0 : 3
+            return bytes[offset + alphaIndex]
+        }
+        return 255
+    }
+    let corner = width / 20
+    let samples = [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1), (corner, corner)]
+    for (x, y) in samples where alpha(x, y) > 8 {
+        fputs("icon corners are still square\n", stderr)
+        exit(1)
+    }
+    if alpha(width / 2, 2) < 200 || alpha(2, height / 2) < 200 {
+        fputs("rounded icon no longer reaches the middle of each edge\n", stderr)
+        exit(1)
+    }
 }
 
 private func pngData(_ image: NSImage) -> Data {

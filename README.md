@@ -6,11 +6,11 @@ Pin a region of your screen on top of all other windows so you can compare it si
 
 PinTool does only this: region capture via hotkey, scrolling long capture, and click-and-drag floating pins. There is no annotation, history, cloud upload, or image editing.
 
-Version **0.1.1**. You can download the Apple Silicon DMG or build from source. Both the downloadable DMG and local builds use ad-hoc code signing only — there is no Apple Developer ID signature, no notarization, and no in-app auto-updater. (Note: the in-app interface labels are currently in Simplified Chinese, displayed as **钉图**, while the binary in macOS Privacy & Security settings is listed as **PinTool**.)
+Version **0.1.2**. You can download the Apple Silicon DMG or build from source. Both the downloadable DMG and local builds use ad-hoc code signing only — there is no Apple Developer ID signature, no notarization, and no in-app auto-updater. (Note: the in-app interface labels are currently in Simplified Chinese, displayed as **钉图**, while the binary in macOS Privacy & Security settings is listed as **PinTool**.)
 
 ## At a Glance
 
-A pushpin icon sits on the right side of the macOS menu bar. The application icon in Finder / Applications is the same pushpin resting on a light sheet of paper.
+A pushpin icon sits on the right side of the macOS menu bar. The application icon in Finder and Applications is that same pushpin on a light sheet of paper, shaped as the macOS rounded rectangle.
 
 ![Pushpin in the menu bar](docs/images/menubar.png)
 
@@ -46,7 +46,7 @@ You can customize both shortcuts from the pushpin icon in the menu bar (`更改�
 
 ## Download & Install
 
-Download `PinTool-0.1.1-arm64.dmg` from [Releases](https://github.com/jayson-sheyue/PinTool/releases/tag/v0.1.1). Supported only on Apple Silicon (`arm64`) running macOS 15 or later. There is no Intel Mac build, and Intel Macs have not been tested.
+Download `PinTool-0.1.2-arm64.dmg` from [Releases](https://github.com/jayson-sheyue/PinTool/releases/tag/v0.1.2). Supported only on Apple Silicon (`arm64`) running macOS 15 or later. There is no Intel Mac build, and Intel Macs have not been tested.
 
 1. Open the DMG and drag **钉图** (`PinTool.app`) into **Applications**.
 2. On first launch, macOS will block the app because it is not notarized. Go to **System Settings → Privacy & Security** and allow it to open once (`Open Anyway`). Do not disable System Integrity Protection (SIP) or turn off Gatekeeper globally.
@@ -109,7 +109,7 @@ Menu bar → **Copy Diagnostics** (`拷贝诊断信息`). This copies the app ve
 - Maximum long-capture height is approximately 20,000 pixels. Once reached, the image stops growing while the frame and green checkmark remain available to finish and pin.
 - DRM-protected content (such as protected video playback) cannot be captured due to macOS limitations.
 - Pinned windows are visible to other screenshot tools (`sharingType = .readOnly`), whereas PinTool's own selection overlay and progress HUD are excluded from its captures.
-- Both downloaded DMGs and local builds are ad-hoc signed, unnotarized, and have no auto-updater. The `0.1.1` DMG contains only the `arm64` binary built on Apple Silicon (`0.1.0` lacked clipboard copy and could collapse similar list rows during long captures).
+- Both downloaded DMGs and local builds are ad-hoc signed, unnotarized, and have no auto-updater. The `0.1.2` DMG contains only the `arm64` binary built on Apple Silicon. Its app icon is the macOS rounded rectangle (`0.1.1` had the same capture behavior with a square icon; `0.1.0` lacked clipboard copy and could collapse similar list rows during long captures).
 
 ## Verification Checks
 
